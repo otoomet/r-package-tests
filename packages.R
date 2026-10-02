@@ -1,7 +1,45 @@
 #!/usr/bin/env Rscript
 
-# Read the DESCRIPTION file
-desc <- read.dcf("DESCRIPTION")
+# Function to show help
+show_help <- function() {
+  cat("Usage: packages.R [OPTIONS] [PACKAGE_FOLDER]\n")
+  cat("\n")
+  cat("Options:\n")
+  cat("  -h, --help       Show this help message\n")
+  cat("  -d, --dir PATH   Path to the package folder\n")
+  cat("\n")
+  cat("Arguments:\n")
+  cat("  PACKAGE_FOLDER   Path to the package folder\n")
+  
+  # Exit after showing help
+  q(save = "no")
+}
+
+# Parse command line arguments
+args <- commandArgs(trailingOnly = TRUE)
+
+# Check for help flag
+if ("-h" %in% args || "--help" %in% args) {
+  show_help()
+}
+
+# Extract package folder path
+package_folder <- NA
+if ("-d" %in% args) {
+  dir_index <- which(args %in% "-d")
+  package_folder <- args[dir_index + 1]
+} else if (length(args) > 0) {
+  package_folder <- args[length(args)]
+}
+
+# If no package folder provided, show help
+if (is.na(package_folder) || package_folder %in% c("-h", "--help", "-d", "--dir")) {
+  cat("Error: Package folder not specified\n")
+  show_help()
+}
+
+# Read the DESCRIPTION file from the package folder
+desc <- read.dcf(file.path(package_folder, "DESCRIPTION"))
 
 # Access by row, then extract the package names from each field
 depends_line <- desc[1, "Depends"]
