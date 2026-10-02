@@ -10,7 +10,8 @@ The script should:
 1. from the package folder, it read the package DESCRIPTION file.
 2. extracts all package names the current package depends on
 3. removes the system packages
-4. prints the packages needed
+4. for each package in the list, checks if it is already installed,
+   and if not, installs it using all cpu cores available.
 
 The script should have shebang in the first line and be executable.
 

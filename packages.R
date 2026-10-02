@@ -73,3 +73,16 @@ filtered_deps <- setdiff(all_deps, system_packages)
 # Print the packages needed
 cat("Packages needed:\n")
 print(filtered_deps)
+
+# Check installation status and install missing packages using all CPU cores
+ncores <- parallel::detectCores()
+ncores <- if (is.na(ncores)) 1L else as.integer(ncores)
+
+for (pkg in filtered_deps) {
+  if (requireNamespace(pkg, quietly = TRUE)) {
+    cat(sprintf("%s: already installed\n", pkg))
+  } else {
+    cat(sprintf("%s: installing...\n", pkg))
+    install.packages(pkg, Ncpus = ncores)
+  }
+}
