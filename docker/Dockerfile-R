@@ -1,35 +1,40 @@
 # -*- mode: dockerfile -*-
+ARG RFLAVOR=devel
 FROM debian:testing
+ARG RFLAVOR
 RUN apt-get update
 ## Just download/unpack first
 RUN apt-get install -y wget xz-utils tar
-RUN wget https://cran.r-project.org/src/base-prerelease/R-patched.tar.xz
-RUN tar xf R-patched.tar.xz
+RUN wget https://cran.r-project.org/src/base-prerelease/R-${RFLAVOR}.tar.xz
+RUN tar xf R-${RFLAVOR}.tar.xz
 ## Install other packages here to speed up adding/removing these
 RUN apt-get install -y file\
    texlive-science texlive-latex-extra texlive-fonts-extra texlive-bibtex-extra\
    ghostscript qpdf tidy\
    libv8-dev\
    make
-WORKDIR /R-patched
+WORKDIR /R-${RFLAVOR}
 ## Configure stuff
 RUN apt-get install -y gcc bison byacc pkgconf gfortran g++\
    libz-dev libbz2-dev liblzma-dev libdeflate-dev\
    libpcre2-dev libcurl4-openssl-dev libxml2-dev\
    cmake
 RUN apt-get install -y tcl-dev tk-dev dpkg-dev
+## Install more packages here ...
+## RUN apt-get install ...
 RUN ./configure --with-readline=no --with-x=no --with-readline=no\
    --with-tcltk
 RUN make -j $(cat /proc/cpuinfo | grep "core id" | sort | uniq | wc -l) &&\
    make install
 ## Package stuff
 WORKDIR /
+RUN mkdir /resultsdir
+RUN rm R-${RFLAVOR}.tar.xz
 COPY packages.R .
 RUN echo "options(repos=c(CRAN='https://cran.r-project.org'))" >.Rprofile
-## Copy the original package ('pkg' context) as folder 'pkg'
 COPY --from=pkg . pkg/
-## Install packages for the package
 RUN Rscript packages.R pkg/
-RUN Rscript -e "install.packages(c('VGAM'))"
+## Install individual packages here to see why the installation fails:
+## V8: some kind of math rendering
 COPY docker/build-check .
 CMD ["bash"]

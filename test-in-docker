@@ -16,6 +16,26 @@ set -e  # fail on error
 cd $(dirname "$0")
 ROOT=$(pwd)
 
+## Known image names.  'devel' and 'patched' share one dockerfile
+## (docker/Dockerfile-R) parametrized by the RFLAVOR build-arg;
+## every other name maps to its own docker/Dockerfile-<name>.
+ALL_NAMES="devel patched patched-openblas-fedora"
+
+dockerfile_for_name() {
+    case "$1" in
+        devel|patched)  echo docker/Dockerfile-R ;;
+        *)              echo "docker/Dockerfile-$1" ;;
+    esac
+}
+
+rflavor_for_name() {
+    case "$1" in
+        devel)   echo devel ;;
+        patched) echo patched ;;
+        *)       echo "" ;;
+    esac
+}
+
 show_help() {
 	echo "Usage: $0 <package-folder> [-a|-n name] [docker buildx options]"
 	echo ""
@@ -27,18 +47,19 @@ show_help() {
 	echo "     --no-cache: start building from scratch"
 	echo ""
 	echo "Available names (default: patched):"
-	for f in docker/Dockerfile-*[^~]; do
-	    printf '  %s\n' "${f#docker/Dockerfile-}"
-	done
+	printf '  %s\n' $ALL_NAMES
 	exit "$1"
 }
 
 logFName() { echo "build-test-${NAME}.log" ; }
 
 test_in_docker() {
-    local TAG DOCKERFILE logfile
+    local TAG DOCKERFILE RFLAVOR BUILDARG logfile
     TAG=${PKG_NAME,,}-$NAME
-    DOCKERFILE=docker/Dockerfile-$NAME
+    DOCKERFILE=$(dockerfile_for_name "$NAME")
+    RFLAVOR=$(rflavor_for_name "$NAME")
+    BUILDARG=""
+    [ -n "$RFLAVOR" ] && BUILDARG="--build-arg RFLAVOR=$RFLAVOR"
     RESULTSDIR=results-${NAME}
     rm -rf results-${NAME} && mkdir ${RESULTSDIR}
     RESULTSDIR_ABS=$(cd "$RESULTSDIR" && pwd)
@@ -51,15 +72,17 @@ test_in_docker() {
     echo "build context: pkg=${PKG_ABS}"
     ## Make results dir
     docker buildx build \
-        --file=$DOCKERFILE \
+        --file="$DOCKERFILE" \
         --build-context=pkg="$PKG_ABS" \
-        --tag=$TAG \
+        $BUILDARG \
+        --tag="$TAG" \
         --load \
         $DOCKEROPTS \
-        $ROOT >$logfile 2>&1
+        "$ROOT" >"$logfile" 2>&1
     echo "Testing $TAG"
     docker run \
 	   --mount type=bind,src=${RESULTSDIR_ABS},dst=/resultsdir \
+	   -e HOST_UID="$HOST_UID" -e HOST_GID="$HOST_GID" \
 	   $TAG ./build-check pkg >>$logfile
     echo ----- Final results of $TAG -----
     cat $logfile | tail -11
@@ -82,6 +105,10 @@ PKG_ABS=$(cd "$PKG_LOCATION" && pwd)
 PKG_PATH=$(basename "$PKG_ABS")
 PKG_NAME=$(awk '/^Package:/ { print $2; exit }' ${PKG_LOCATION}/DESCRIPTION)
 echo "Package: ${PKG_NAME}"
+## Passed into the container so build-check can chown the results
+## (created as root) back to the invoking host user.
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
 DOCKEROPTS=""
 NAME="patched"
 
@@ -89,8 +116,7 @@ case "$1" in
     --all|-a)
 	shift
 	echo "Running check on all Docker containers with package ${PKG_PATH}"
-	for f in docker/Dockerfile-*[^~]; do
-	    NAME=${f#docker/Dockerfile-}
+	for NAME in $ALL_NAMES; do
 	    test_in_docker &
 	done
 	wait
