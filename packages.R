@@ -49,8 +49,10 @@ suggests_line <- desc[1, "Suggests"]
 # Function to extract package names from a comma-separated string
 extract_packages <- function(field) {
   if (!is.na(field) && field != "") {
-    packages <- unlist(strsplit(field, ", "))
-    packages <- gsub(" .*", "", packages)
+    field <- gsub("\n", " ", field)   # unfold DCF line continuation
+    packages <- unlist(strsplit(field, ",\\s*"))
+    packages <- sub(" *\\(.*", "", packages)  # strip version constraints
+    packages <- trimws(packages)
     packages <- packages[packages != ""]
     return(packages)
   }

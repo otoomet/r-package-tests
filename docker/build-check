@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+## Usage: build-check <package-folder-name>
+## Builds and checks the R package in ./<package-folder-name>.
+set -e
+PKG=${1:-pkg}
+if [ ! -d "$PKG" ]; then
+    echo "Error: package folder '$PKG' not found (usage: $0 <package-folder>)" >&2
+    exit 1
+fi
+PKG_NAME=$(awk -F': *' '/^Package:/ {print $2; exit}' "$PKG/DESCRIPTION")
+if [ -z "$PKG_NAME" ]; then
+    echo "Error: could not read package name from $PKG/DESCRIPTION" >&2
+    exit 1
+fi
+R --version
+R CMD build --compact-vignettes=both "$PKG"
+version=$(awk -F': ' '/^Version:/ {gsub(/\r/,""); print $2; exit}' "$PKG/DESCRIPTION")
+echo "Checking version ${version}"
+R CMD check --as-cran "${PKG_NAME}_${version}.tar.gz"
+
+cp -r ${PKG_NAME}.Rcheck/* resultsdir/

@@ -1,0 +1,39 @@
+# -*- mode: dockerfile -*-
+FROM debian:testing
+RUN apt-get update
+## Just download/unpack first
+RUN apt-get install -y wget xz-utils tar
+RUN wget https://cran.r-project.org/src/base-prerelease/R-devel.tar.xz
+RUN tar xf R-devel.tar.xz
+## Install other packages here to speed up adding/removing these
+RUN apt-get install -y file\
+   texlive-science texlive-latex-extra texlive-fonts-extra texlive-bibtex-extra\
+   ghostscript qpdf tidy\
+   libv8-dev\
+   make
+WORKDIR /R-devel
+## Configure stuff
+RUN apt-get install -y gcc bison byacc pkgconf gfortran g++\
+   libz-dev libbz2-dev liblzma-dev libdeflate-dev\
+   libpcre2-dev libcurl4-openssl-dev libxml2-dev\
+   cmake
+RUN apt-get install -y tcl-dev tk-dev dpkg-dev
+## Install more packages here ...
+## RUN apt-get install ...
+RUN ./configure --with-readline=no --with-x=no --with-readline=no\
+   --with-tcltk
+RUN make -j $(cat /proc/cpuinfo | grep "core id" | sort | uniq | wc -l) &&\
+   make install
+## Package stuff
+WORKDIR /
+RUN mkdir /resultsdir
+RUN rm R-devel.tar.xz
+COPY packages.R .
+RUN echo "options(repos=c(CRAN='https://cran.r-project.org'))" >.Rprofile
+COPY --from=pkg . pkg/
+RUN Rscript packages.R pkg/
+## Install individual packages here to see why the installation fails:
+## V8: some kind of math rendering
+RUN Rscript -e "install.packages('V8')"
+COPY docker/build-check .
+CMD ["bash"]

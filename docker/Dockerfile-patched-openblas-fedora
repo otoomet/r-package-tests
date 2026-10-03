@@ -1,0 +1,42 @@
+# -*- dockerfile -*-
+FROM fedora:latest
+# RUN dnf check-update
+RUN dnf upgrade -y
+## Just download/unpack first
+RUN dnf install -y wget xz tar
+RUN wget https://cran.r-project.org/src/base-prerelease/R-patched.tar.xz
+RUN tar xf R-patched.tar.xz
+## Install other packages here to speed up adding/removing these
+RUN dnf install -y ghostscript qpdf tidy\
+   v8-devel\
+   make
+WORKDIR R-patched
+## Configure stuff
+RUN dnf install -y gcc bison byacc pkgconf gfortran g++\
+   zlib-devel bzip2-devel xz-devel libdeflate-devel\
+   pcre2-devel libcurl-devel libxml2-devel which\
+   openblas-devel
+RUN dnf install -y tcl-devel tk-devel dpkg-devel
+RUN dnf install -y texlive-collection-mathscience
+ENV BLAS_LIBS="-lopenblas"
+ENV LAPACK_LIBS="-lopenblas"
+RUN ./configure --with-readline=no --with-x=no\
+   --with-blas --with-lapack --enable-threads\
+   --enable-R-shlib\
+   --includedir=/usr/include:/usr/include/openblas\
+   --with-tcltk
+RUN make -j $(cat /proc/cpuinfo | grep "core id" | sort | uniq | wc -l) &&\
+   make install
+## Did we got blas/lapack right?
+RUN ls $(R RHOME)/lib
+RUN ldd $(R RHOME)/lib/libR.so | grep -i blas
+RUN Rscript -e 'extSoftVersion()["BLAS"]'
+## Package stuff
+COPY packages.R .
+RUN echo "options(repos=c(CRAN='https://cran.r-project.org'))" >.Rprofile
+COPY --from=pkg . ./pkg
+RUN Rscript packages.R ./pkg
+RUN dnf install -y texlive-marginnote\
+    texlive-bbm
+COPY docker/build-check .
+CMD ["bash"]

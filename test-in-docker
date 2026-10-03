@@ -1,0 +1,114 @@
+#!/usr/bin/bash
+## Test an R package in docker containers with various R versions.
+##
+## Usage: test-in-docker <package-folder> [-a|-n name] [docker buildx options]
+##
+## <package-folder>  mandatory: path to the R package source folder
+##                   (must contain a DESCRIPTION file)
+## -a, --all         build and test all docker images in parallel (default)
+## -n, --name NAME   build and test only the image with the given name
+##                   (default name: patched)
+##
+## Remaining arguments are passed to 'docker buildx build'
+## (e.g. --no-cache)
+set -e  # fail on error
+
+cd $(dirname "$0")
+ROOT=$(pwd)
+
+show_help() {
+	echo "Usage: $0 <package-folder> [-a|-n name] [docker buildx options]"
+	echo ""
+	echo " <package-folder>   path to the R package source folder (mandatory)"
+	echo " -a, --all          build and test all docker images in parallel"
+	echo " -n, --name NAME    build and test the image with the given name"
+	echo ""
+	echo "   useful buildx options are:"
+	echo "     --no-cache: start building from scratch"
+	echo ""
+	echo "Available names (default: patched):"
+	for f in docker/Dockerfile-*[^~]; do
+	    printf '  %s\n' "${f#docker/Dockerfile-}"
+	done
+	exit "$1"
+}
+
+logFName() { echo "build-test-${NAME}.log" ; }
+
+test_in_docker() {
+    local TAG DOCKERFILE logfile
+    TAG=${PKG_NAME,,}-$NAME
+    DOCKERFILE=docker/Dockerfile-$NAME
+    RESULTSDIR=results-${NAME}
+    rm -rf results-${NAME} && mkdir ${RESULTSDIR}
+    RESULTSDIR_ABS=$(cd "$RESULTSDIR" && pwd)
+    logfile=${RESULTSDIR}/$(logFName)
+    if [ ! -f "$DOCKERFILE" ]; then
+        echo "Error: $DOCKERFILE not found" >&2
+        return 1
+    fi
+    echo "Building ${NAME} (tag ${TAG}), logging to ${logfile} ..."
+    echo "build context: pkg=${PKG_ABS}"
+    ## Make results dir
+    docker buildx build \
+        --file=$DOCKERFILE \
+        --build-context=pkg="$PKG_ABS" \
+        --tag=$TAG \
+        --load \
+        $DOCKEROPTS \
+        $ROOT >$logfile 2>&1
+    echo "Testing $TAG"
+    docker run \
+	   --mount type=bind,src=${RESULTSDIR_ABS},dst=/resultsdir \
+	   $TAG ./build-check pkg >>$logfile
+    echo ----- Final results of $TAG -----
+    cat $logfile | tail -11
+}
+
+if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help 1
+fi
+PKG_LOCATION="$1"; shift
+
+if [ ! -d "$PKG_LOCATION" ]; then
+    echo "Error: package folder '$PKG_LOCATION' does not exist" >&2
+    show_help 1
+fi
+if [ ! -f "$PKG_LOCATION/DESCRIPTION" ]; then
+    echo "Error: no DESCRIPTION in '$PKG_LOCATION'; is it an R package folder?" >&2
+    show_help 1
+fi
+PKG_ABS=$(cd "$PKG_LOCATION" && pwd)
+PKG_PATH=$(basename "$PKG_ABS")
+PKG_NAME=$(awk '/^Package:/ { print $2; exit }' ${PKG_LOCATION}/DESCRIPTION)
+echo "Package: ${PKG_NAME}"
+DOCKEROPTS=""
+NAME="patched"
+
+case "$1" in
+    --all|-a)
+	shift
+	echo "Running check on all Docker containers with package ${PKG_PATH}"
+	for f in docker/Dockerfile-*[^~]; do
+	    NAME=${f#docker/Dockerfile-}
+	    test_in_docker &
+	done
+	wait
+	exit 0 ;;
+    --name|-n)
+	if [ $# -lt 2 ] || [ -z "${2:-}" ] || [ "${2:0:1}" = "-" ]; then
+	    echo "Error: -n requires a name" >&2
+	    show_help 1
+	fi
+	NAME="$2"; shift 2
+	DOCKEROPTS="$*"
+	;;
+    *)
+	DOCKEROPTS="$*"
+	;;
+esac
+
+test_in_docker
+
+## to inspect logs: run interactively
+## > docker run -it maxlik-${NAME} /bin/bash
