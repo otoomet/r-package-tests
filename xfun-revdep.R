@@ -62,5 +62,16 @@ if (!file.exists(desc_file)) {
 desc <- read.dcf(desc_file)
 pkg <- desc[1, "Package"]
 
+## rev_check() downloads sources and creates '*.Rcheck' dirs in the
+## current working directory, so run it from a dedicated subfolder.
+## (package_folder is already absolute, so it stays valid after setwd.)
+results_dir <- "revdep"
+dir.create(results_dir, showWarnings = FALSE)
+setwd(results_dir)
+
 cat(sprintf("Checking %s\n", pkg))
+options(mc.cores = parallel::detectCores() %/% 2,
+        xfun.rev_check.download_cores = parallel::detectCores() %/% 2)
+                           # There may be compilation errors with too high
+                           # parallelism
 xfun::rev_check(pkg, update = update, src = package_folder)
