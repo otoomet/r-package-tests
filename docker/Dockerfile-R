@@ -36,5 +36,6 @@ COPY --from=pkg . pkg/
 RUN Rscript packages.R pkg/
 ## Install individual packages here to see why the installation fails:
 ## V8: some kind of math rendering
+RUN Rscript -e "install.packages('V8', Ncpu = parallel::detectCores())"
 COPY docker/build-check .
 CMD ["bash"]

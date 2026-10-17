@@ -1,4 +1,6 @@
 #!/usr/bin/env Rscript
+## This script is intended to be run inside docker container,
+## not directly by the user.
 
 # Function to show help
 show_help <- function() {
@@ -71,6 +73,9 @@ all_deps <- c(dependencies, imports, suggests)
 system_packages <- c("R", "base", "methods", "tools", "utils", "grDevices", 
                      "stats", "graphics")
 filtered_deps <- setdiff(all_deps, system_packages)
+## Add V8: needed to check math rendering for checks
+## Add other needed depts here
+filtered_deps <- union(filtered_deps, "V8")
 
 # Print the packages needed
 cat("Packages needed:\n")

@@ -17,7 +17,9 @@ RUN dnf install -y gcc bison byacc pkgconf gfortran g++\
    pcre2-devel libcurl-devel libxml2-devel which\
    openblas-devel
 RUN dnf install -y tcl-devel tk-devel dpkg-devel
-RUN dnf install -y texlive-collection-mathscience
+RUN dnf install -y texlive-collection-mathscience\
+   texlive-marginnote\
+   texlive-bbm
 ENV BLAS_LIBS="-lopenblas"
 ENV LAPACK_LIBS="-lopenblas"
 RUN ./configure --with-readline=no --with-x=no\
@@ -32,11 +34,15 @@ RUN ls $(R RHOME)/lib
 RUN ldd $(R RHOME)/lib/libR.so | grep -i blas
 RUN Rscript -e 'extSoftVersion()["BLAS"]'
 ## Package stuff
+WORKDIR /
+RUN mkdir /resultsdir
+RUN rm R-patched.tar.xz
 COPY packages.R .
 RUN echo "options(repos=c(CRAN='https://cran.r-project.org'))" >.Rprofile
 COPY --from=pkg . ./pkg
 RUN Rscript packages.R ./pkg
-RUN dnf install -y texlive-marginnote\
-    texlive-bbm
+## Install individual packages here to see why the installation fails:
+## V8: some kind of math rendering
+RUN Rscript -e "install.packages('V8', Ncpu = parallel::detectCores())"
 COPY docker/build-check .
 CMD ["bash"]
